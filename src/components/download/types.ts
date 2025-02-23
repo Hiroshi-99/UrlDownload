@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
-export interface Download {
+export interface DownloadItem {
   id: string;
   status: "processing" | "completed" | "failed";
   error_message?: string;

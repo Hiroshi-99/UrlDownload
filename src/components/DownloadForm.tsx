@@ -6,7 +6,7 @@ import { Loader2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FormatSelector } from "./download/FormatSelector";
 import { DownloadProgress } from "./download/DownloadProgress";
-import { Download } from "./download/types";
+import { DownloadItem } from "./download/types";
 import { videoPatterns } from "./download/constants";
 
 export const DownloadForm = () => {
@@ -100,7 +100,7 @@ export const DownloadForm = () => {
           return;
         }
 
-        const download = downloadData as Download;
+        const download = downloadData as DownloadItem;
 
         if (download) {
           if (download.status === "completed") {
