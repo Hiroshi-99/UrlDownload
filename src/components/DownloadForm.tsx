@@ -2,34 +2,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Video, Volume2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
-
-type Download = Database['public']['Tables']['downloads']['Row'];
-
-interface VideoFormat {
-  value: string;
-  label: string;
-  icon: React.ReactNode;
-  quality: string;
-}
-
-const formats: VideoFormat[] = [
-  { value: "mp4", label: "MP4 Video", icon: <Video className="w-4 h-4" />, quality: "1080p" },
-  { value: "mp4-hd", label: "MP4 Video HD", icon: <Video className="w-4 h-4" />, quality: "4K" },
-  { value: "mp3", label: "MP3 Audio", icon: <Volume2 className="w-4 h-4" />, quality: "320kbps" },
-  { value: "mp3-hq", label: "MP3 Audio HQ", icon: <Volume2 className="w-4 h-4" />, quality: "320kbps" },
-];
+import { FormatSelector } from "./download/FormatSelector";
+import { DownloadProgress } from "./download/DownloadProgress";
+import { Download } from "./download/types";
+import { videoPatterns } from "./download/constants";
 
 export const DownloadForm = () => {
   const [url, setUrl] = useState("");
@@ -39,12 +18,6 @@ export const DownloadForm = () => {
   const { toast } = useToast();
 
   const validateURL = (url: string) => {
-    const videoPatterns = [
-      /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/,
-      /^(https?:\/\/)?(www\.)?vimeo\.com\/.+$/,
-      /^(https?:\/\/)?(www\.)?dailymotion\.com\/.+$/,
-    ];
-
     return videoPatterns.some(pattern => pattern.test(url));
   };
 
@@ -151,28 +124,11 @@ export const DownloadForm = () => {
       </div>
       
       <div className="flex gap-4">
-        <Select
+        <FormatSelector 
           value={format}
           onValueChange={setFormat}
           disabled={loading}
-        >
-          <SelectTrigger className="w-[180px] glass-effect border-none">
-            <SelectValue placeholder="Select format" />
-          </SelectTrigger>
-          <SelectContent>
-            {formats.map((format) => (
-              <SelectItem key={format.value} value={format.value}>
-                <div className="flex items-center gap-2">
-                  {format.icon}
-                  <span>{format.label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {format.quality}
-                  </span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
 
         <Button 
           type="submit" 
@@ -186,14 +142,7 @@ export const DownloadForm = () => {
         </Button>
       </div>
 
-      {loading && (
-        <div className="space-y-2">
-          <Progress value={progress} className="h-2 w-full" />
-          <p className="text-sm text-center text-muted-foreground">
-            {progress < 100 ? "Processing your download..." : "Almost done..."}
-          </p>
-        </div>
-      )}
+      {loading && <DownloadProgress progress={progress} />}
     </form>
   );
 };
