@@ -9,11 +9,19 @@ import { DownloadProgress } from "./download/DownloadProgress";
 import { DownloadItem } from "./download/types";
 import { videoPatterns } from "./download/constants";
 
+interface ProgressState {
+  percent: number;
+  stage: "downloading" | "processing" | "uploading" | "completed";
+}
+
 export const DownloadForm = () => {
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState("mp4");
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progressState, setProgressState] = useState<ProgressState>({
+    percent: 0,
+    stage: "downloading",
+  });
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -82,7 +90,7 @@ export const DownloadForm = () => {
 
     try {
       setLoading(true);
-      setProgress(0);
+      setProgressState({ percent: 0, stage: "downloading" });
       setDownloadUrl(null);
 
       const { data, error } = await supabase.functions.invoke(
@@ -98,7 +106,7 @@ export const DownloadForm = () => {
       const checkProgress = setInterval(async () => {
         const { data: downloadData, error: downloadError } = await supabase
           .from("downloads")
-          .select("id, status, error_message, file_path")
+          .select("id, status, error_message, file_path, progress, stage")
           .eq("id", data.id)
           .single();
 
@@ -117,16 +125,20 @@ export const DownloadForm = () => {
         const download = downloadData as DownloadItem;
 
         if (download) {
+          setProgressState({
+            percent: download.progress || 0,
+            stage: download.stage || "downloading",
+          });
+
           if (download.status === "completed") {
-            setProgress(100);
+            setProgressState({ percent: 100, stage: "completed" });
             clearInterval(checkProgress);
             setLoading(false);
-            setDownloadUrl(download.id); // Store the download ID
+            setDownloadUrl(download.id);
             toast({
               title: "Success!",
               description: "Your download is ready",
             });
-            // Automatically trigger download
             await handleDownload(download.id);
           } else if (download.status === "failed") {
             clearInterval(checkProgress);
@@ -136,8 +148,6 @@ export const DownloadForm = () => {
               description: download.error_message || "Download failed",
               variant: "destructive",
             });
-          } else {
-            setProgress((prev) => Math.min(prev + 10, 90));
           }
         }
       }, 1000);
@@ -148,7 +158,23 @@ export const DownloadForm = () => {
         variant: "destructive",
       });
       setLoading(false);
-      setProgress(0);
+      setProgressState({ percent: 0, stage: "downloading" });
+    }
+  };
+
+  // Helper function to get progress message
+  const getProgressMessage = (state: ProgressState) => {
+    switch (state.stage) {
+      case "downloading":
+        return `Downloading video... ${state.percent}%`;
+      case "processing":
+        return `Processing your download... ${state.percent}%`;
+      case "uploading":
+        return `Preparing download... ${state.percent}%`;
+      case "completed":
+        return "Download ready!";
+      default:
+        return `Processing... ${state.percent}%`;
     }
   };
 
@@ -193,7 +219,12 @@ export const DownloadForm = () => {
         )}
       </div>
 
-      {loading && <DownloadProgress progress={progress} />}
+      {loading && (
+        <DownloadProgress
+          progress={progressState.percent}
+          message={getProgressMessage(progressState)}
+        />
+      )}
     </form>
   );
 };
