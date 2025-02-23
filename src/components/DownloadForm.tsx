@@ -21,6 +21,12 @@ interface VideoFormat {
   quality: string;
 }
 
+interface Download {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  error_message: string | null;
+}
+
 const formats: VideoFormat[] = [
   { value: "mp4", label: "MP4 Video", icon: <Video className="w-4 h-4" />, quality: "1080p" },
   { value: "mp4-hd", label: "MP4 Video HD", icon: <Video className="w-4 h-4" />, quality: "4K" },
@@ -80,11 +86,24 @@ export const DownloadForm = () => {
 
       // Set up progress monitoring
       const checkProgress = setInterval(async () => {
-        const { data: download } = await supabase
+        const { data: downloadData, error: downloadError } = await supabase
           .from('downloads')
-          .select('status, error_message')
+          .select('id, status, error_message')
           .eq('id', data.id)
-          .single();
+          .maybeSingle();
+
+        const download = downloadData as Download | null;
+
+        if (downloadError) {
+          clearInterval(checkProgress);
+          setLoading(false);
+          toast({
+            title: "Error",
+            description: "Failed to check download status",
+            variant: "destructive",
+          });
+          return;
+        }
 
         if (download) {
           if (download.status === 'completed') {
