@@ -88,13 +88,14 @@ export const DownloadForm = () => {
       const checkProgress = setInterval(async () => {
         const { data: downloadData, error: downloadError } = await supabase
           .from("downloads")
-          .select("id, status, error_message, download_url")
+          .select("id, status, error_message, file_path")
           .eq("id", data.id)
-          .maybeSingle();
+          .single();
 
         if (downloadError) {
           clearInterval(checkProgress);
           setLoading(false);
+          console.error("Download error:", downloadError);
           toast({
             title: "Error",
             description: "Failed to check download status",
