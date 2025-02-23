@@ -23,16 +23,19 @@ export const DownloadForm = () => {
 
   const handleDownload = async (downloadId: string) => {
     try {
-      const { data: downloadData, error: downloadError } =
-        await supabase.functions.invoke("get-download-url", {
+      const { data, error } = await supabase.functions.invoke(
+        "get-download-url",
+        {
           body: { downloadId },
-        });
+        }
+      );
 
-      if (downloadError) throw downloadError;
+      if (error) throw error;
+      if (!data?.url) throw new Error("No download URL received");
 
       // Create a temporary link and trigger download
       const link = document.createElement("a");
-      link.href = downloadData.url;
+      link.href = data.url;
       link.setAttribute("download", ""); // This will keep the original filename
       document.body.appendChild(link);
       link.click();

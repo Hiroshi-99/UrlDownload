@@ -1,12 +1,7 @@
 import { ReactNode } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
-export interface DownloadItem {
-  id: string;
-  status: "processing" | "completed" | "failed";
-  error_message?: string;
-  download_url?: string;
-}
+export type DownloadItem = Database["public"]["Tables"]["downloads"]["Row"];
 
 export interface VideoFormat {
   value: string;
