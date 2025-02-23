@@ -12,6 +12,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Video, Volume2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoFormat {
   value: string;
@@ -69,35 +70,49 @@ export const DownloadForm = () => {
       setLoading(true);
       setProgress(0);
 
-      // Simulate download process with realistic progress updates
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
+      const { data, error } = await supabase.functions.invoke('process-download', {
+        body: { url, format }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Set up progress monitoring
+      const checkProgress = setInterval(async () => {
+        const { data: download } = await supabase
+          .from('downloads')
+          .select('status, error_message')
+          .eq('id', data.id)
+          .single();
+
+        if (download) {
+          if (download.status === 'completed') {
+            setProgress(100);
+            clearInterval(checkProgress);
+            setLoading(false);
+            toast({
+              title: "Success!",
+              description: "Your download is ready",
+            });
+          } else if (download.status === 'failed') {
+            clearInterval(checkProgress);
+            setLoading(false);
+            toast({
+              title: "Error",
+              description: download.error_message || "Download failed",
+              variant: "destructive",
+            });
+          } else {
+            // Update progress for processing state
+            setProgress((prev) => Math.min(prev + 10, 90));
           }
-          // Add some randomness to make it feel more realistic
-          const increment = Math.random() * 15 + 5;
-          return Math.min(prev + increment, 100);
-        });
-      }, 500);
+        }
+      }, 1000);
 
-      // Simulate processing time based on format
-      const processingTime = format.includes('hd') || format.includes('hq') ? 7000 : 5000;
-
-      // Reset after "download" completion
-      setTimeout(() => {
-        setLoading(false);
-        setProgress(0);
-        clearInterval(interval);
-        toast({
-          title: "Download Complete!",
-          description: `Your ${format.toUpperCase()} file has been processed successfully.`,
-        });
-      }, processingTime);
     } catch (error) {
       toast({
-        title: "Processing Error",
+        title: "Error",
         description: "Failed to process your request. Please try again.",
         variant: "destructive",
       });
