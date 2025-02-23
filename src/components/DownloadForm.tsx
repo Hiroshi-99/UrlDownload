@@ -13,18 +13,15 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Video, Volume2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+type Download = Database['public']['Tables']['downloads']['Row'];
 
 interface VideoFormat {
   value: string;
   label: string;
   icon: React.ReactNode;
   quality: string;
-}
-
-interface Download {
-  id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  error_message: string | null;
 }
 
 const formats: VideoFormat[] = [
@@ -92,8 +89,6 @@ export const DownloadForm = () => {
           .eq('id', data.id)
           .maybeSingle();
 
-        const download = downloadData as Download | null;
-
         if (downloadError) {
           clearInterval(checkProgress);
           setLoading(false);
@@ -104,6 +99,8 @@ export const DownloadForm = () => {
           });
           return;
         }
+
+        const download = downloadData as Download;
 
         if (download) {
           if (download.status === 'completed') {
