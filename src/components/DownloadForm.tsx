@@ -1,9 +1,8 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FormatSelector } from "./download/FormatSelector";
 import { DownloadProgress } from "./download/DownloadProgress";
@@ -15,15 +14,41 @@ export const DownloadForm = () => {
   const [format, setFormat] = useState("mp4");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const validateURL = (url: string) => {
-    return videoPatterns.some(pattern => pattern.test(url));
+    return videoPatterns.some((pattern) => pattern.test(url));
+  };
+
+  const handleDownload = async (downloadId: string) => {
+    try {
+      const { data: downloadData, error: downloadError } =
+        await supabase.functions.invoke("get-download-url", {
+          body: { downloadId },
+        });
+
+      if (downloadError) throw downloadError;
+
+      // Create a temporary link and trigger download
+      const link = document.createElement("a");
+      link.href = downloadData.url;
+      link.setAttribute("download", ""); // This will keep the original filename
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to download the file. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!url) {
       toast({
         title: "Error",
@@ -45,21 +70,23 @@ export const DownloadForm = () => {
     try {
       setLoading(true);
       setProgress(0);
+      setDownloadUrl(null);
 
-      const { data, error } = await supabase.functions.invoke('process-download', {
-        body: { url, format }
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "process-download",
+        {
+          body: { url, format },
+        }
+      );
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       // Set up progress monitoring
       const checkProgress = setInterval(async () => {
         const { data: downloadData, error: downloadError } = await supabase
-          .from('downloads')
-          .select('id, status, error_message')
-          .eq('id', data.id)
+          .from("downloads")
+          .select("id, status, error_message, download_url")
+          .eq("id", data.id)
           .maybeSingle();
 
         if (downloadError) {
@@ -76,15 +103,18 @@ export const DownloadForm = () => {
         const download = downloadData as Download;
 
         if (download) {
-          if (download.status === 'completed') {
+          if (download.status === "completed") {
             setProgress(100);
             clearInterval(checkProgress);
             setLoading(false);
+            setDownloadUrl(download.id); // Store the download ID
             toast({
               title: "Success!",
               description: "Your download is ready",
             });
-          } else if (download.status === 'failed') {
+            // Automatically trigger download
+            await handleDownload(download.id);
+          } else if (download.status === "failed") {
             clearInterval(checkProgress);
             setLoading(false);
             toast({
@@ -93,12 +123,10 @@ export const DownloadForm = () => {
               variant: "destructive",
             });
           } else {
-            // Update progress for processing state
             setProgress((prev) => Math.min(prev + 10, 90));
           }
         }
       }, 1000);
-
     } catch (error) {
       toast({
         title: "Error",
@@ -122,24 +150,33 @@ export const DownloadForm = () => {
           disabled={loading}
         />
       </div>
-      
+
       <div className="flex gap-4">
-        <FormatSelector 
+        <FormatSelector
           value={format}
           onValueChange={setFormat}
           disabled={loading}
         />
 
-        <Button 
-          type="submit" 
-          className="flex-1 h-12 bg-primary hover:bg-primary/90" 
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : null}
-          {loading ? "Processing..." : "Download"}
-        </Button>
+        {downloadUrl ? (
+          <Button
+            type="button"
+            className="flex-1 h-12 bg-green-600 hover:bg-green-700"
+            onClick={() => handleDownload(downloadUrl)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Again
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            className="flex-1 h-12 bg-primary hover:bg-primary/90"
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {loading ? "Processing..." : "Download"}
+          </Button>
+        )}
       </div>
 
       {loading && <DownloadProgress progress={progress} />}
