@@ -1,7 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient,
+  SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
+import { downloadVideo, downloadAudio } from "./video.ts";
 
-const corsHeaders = {
+interface CorsHeaders {
+  [key: string]: string;
+}
+
+interface RequestBody {
+  url: string;
+  format: string;
+}
+
+const corsHeaders: CorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
@@ -83,14 +96,13 @@ const createDummyMP3 = () => {
   return header;
 };
 
-serve(async (req) => {
-  // Handle CORS preflight requests
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { url, format } = await req.json();
+    const { url, format } = (await req.json()) as RequestBody;
 
     if (!url) {
       return new Response(JSON.stringify({ error: "URL is required" }), {
@@ -102,7 +114,7 @@ serve(async (req) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    ) as SupabaseClient;
 
     // Generate a unique filename
     const timestamp = Date.now();
@@ -132,25 +144,23 @@ serve(async (req) => {
       );
     }
 
-    // Simulate processing and upload a dummy file
+    // Process video in background
     setTimeout(async () => {
       try {
-        // Create appropriate dummy content based on format
-        const dummyContent = format.startsWith("mp4")
-          ? createDummyMP4()
-          : createDummyMP3();
+        // Download and process based on format
+        const data = format.includes("mp3")
+          ? await downloadAudio(url)
+          : await downloadVideo(url, format);
 
-        // Upload the file to storage
+        // Upload the processed file
         const { error: uploadError } = await supabase.storage
           .from("downloads")
-          .upload(filePath, dummyContent, {
-            contentType: format.startsWith("mp4") ? "video/mp4" : "audio/mpeg",
+          .upload(filePath, data, {
+            contentType: format.includes("mp3") ? "audio/mpeg" : "video/mp4",
             upsert: true,
           });
 
-        if (uploadError) {
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
         // Update status to completed
         const { error: updateError } = await supabase
@@ -158,9 +168,7 @@ serve(async (req) => {
           .update({ status: "completed" })
           .eq("id", download.id);
 
-        if (updateError) {
-          throw updateError;
-        }
+        if (updateError) throw updateError;
       } catch (error) {
         console.error("Error in processing:", error);
         await supabase
@@ -171,7 +179,7 @@ serve(async (req) => {
           })
           .eq("id", download.id);
       }
-    }, 2000);
+    }, 0); // Start processing immediately
 
     return new Response(JSON.stringify({ id: download.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
