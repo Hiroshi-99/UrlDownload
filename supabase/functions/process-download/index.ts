@@ -28,6 +28,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // Generate a unique filename
+    const timestamp = Date.now();
+    const filename = `${timestamp}.${format}`;
+    const filePath = `${format}/${filename}`; // Simplified path structure
+
     // Create a new download record
     const { data: download, error: insertError } = await supabase
       .from("downloads")
@@ -35,7 +40,7 @@ serve(async (req) => {
         url,
         format,
         status: "processing",
-        file_path: `downloads/${format}/${Date.now()}.${format}`,
+        file_path: filePath,
       })
       .select()
       .single();
@@ -51,15 +56,42 @@ serve(async (req) => {
       );
     }
 
-    // Simulate processing
+    // Simulate processing and upload a dummy file
     setTimeout(async () => {
-      const { error: updateError } = await supabase
-        .from("downloads")
-        .update({ status: "completed" })
-        .eq("id", download.id);
+      try {
+        // Create a dummy file content (in real app, this would be the processed video/audio)
+        const dummyContent = new Uint8Array([1, 2, 3, 4, 5]);
 
-      if (updateError) {
-        console.error("Error updating download status:", updateError);
+        // Upload the file to storage
+        const { error: uploadError } = await supabase.storage
+          .from("downloads")
+          .upload(filePath, dummyContent, {
+            contentType: format.startsWith("mp4") ? "video/mp4" : "audio/mpeg",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        // Update status to completed
+        const { error: updateError } = await supabase
+          .from("downloads")
+          .update({ status: "completed" })
+          .eq("id", download.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+      } catch (error) {
+        console.error("Error in processing:", error);
+        await supabase
+          .from("downloads")
+          .update({
+            status: "failed",
+            error_message: error.message,
+          })
+          .eq("id", download.id);
       }
     }, 2000);
 

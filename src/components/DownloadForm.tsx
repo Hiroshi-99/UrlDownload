@@ -26,7 +26,7 @@ export const DownloadForm = () => {
       // Get the download record
       const { data: download, error: downloadError } = await supabase
         .from("downloads")
-        .select("file_path")
+        .select("file_path, format")
         .eq("id", downloadId)
         .single();
 
@@ -36,7 +36,7 @@ export const DownloadForm = () => {
       // Get a signed URL directly from storage
       const { data: signedUrl, error: signedUrlError } = await supabase.storage
         .from("downloads")
-        .createSignedUrl(download.file_path, 60); // URL expires in 60 seconds
+        .createSignedUrl(download.file_path, 60);
 
       if (signedUrlError) throw signedUrlError;
       if (!signedUrl?.signedUrl)
@@ -45,7 +45,7 @@ export const DownloadForm = () => {
       // Create a temporary link and trigger download
       const link = document.createElement("a");
       link.href = signedUrl.signedUrl;
-      link.setAttribute("download", "");
+      link.setAttribute("download", `download.${download.format}`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
