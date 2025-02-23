@@ -1,5 +1,4 @@
-import type { VideoFormat, VideoInfo } from "https://esm.sh/ytdl-core@4.11.5";
-import ytdl from "https://esm.sh/ytdl-core@4.11.5";
+import { ytdl, type VideoFormat, type VideoInfo } from "./deps.ts";
 
 interface VimeoFormat {
   quality: string;
@@ -32,7 +31,49 @@ async function getDailymotionInfo(url: string): Promise<DailymotionQuality> {
   return data.qualities;
 }
 
-export async function downloadVideo(url: string, format: string) {
+async function downloadWithProgress(
+  url: string,
+  onProgress?: (progress: number) => void
+): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  if (!response.body) throw new Error("Response body is null");
+
+  const contentLength = Number(response.headers.get("Content-Length")) || 0;
+  let receivedLength = 0;
+  const chunks: Uint8Array[] = [];
+
+  const reader = response.body.getReader();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    chunks.push(value);
+    receivedLength += value.length;
+
+    if (onProgress && contentLength) {
+      const progress = (receivedLength / contentLength) * 100;
+      onProgress(Math.round(progress));
+    }
+  }
+
+  // Combine all chunks into a single Uint8Array
+  const result = new Uint8Array(receivedLength);
+  let position = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, position);
+    position += chunk.length;
+  }
+
+  return result;
+}
+
+export async function downloadVideo(
+  url: string,
+  format: string,
+  onProgress?: (progress: number) => void
+) {
   try {
     let videoUrl: string;
 
@@ -56,19 +97,18 @@ export async function downloadVideo(url: string, format: string) {
       throw new Error("Unsupported video platform");
     }
 
-    // Download the video
-    const response = await fetch(videoUrl);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
+    // Download the video with progress
+    return await downloadWithProgress(videoUrl, onProgress);
   } catch (error) {
     console.error("Error downloading video:", error);
     throw new Error(`Failed to download video: ${error.message}`);
   }
 }
 
-export async function downloadAudio(url: string) {
+export async function downloadAudio(
+  url: string,
+  onProgress?: (progress: number) => void
+) {
   try {
     let audioUrl: string;
 
@@ -91,12 +131,8 @@ export async function downloadAudio(url: string) {
       throw new Error("Unsupported platform");
     }
 
-    // Download the audio
-    const response = await fetch(audioUrl);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
+    // Download the audio with progress
+    return await downloadWithProgress(audioUrl, onProgress);
   } catch (error) {
     console.error("Error downloading audio:", error);
     throw new Error(`Failed to download audio: ${error.message}`);

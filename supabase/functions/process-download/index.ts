@@ -1,8 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  createClient,
-  SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
+import { serve, createClient, type SupabaseClient } from "./deps.ts";
 import { downloadVideo, downloadAudio } from "./video.ts";
 
 interface CorsHeaders {
@@ -149,8 +145,18 @@ serve(async (req: Request) => {
       try {
         // Download and process based on format
         const data = format.includes("mp3")
-          ? await downloadAudio(url)
-          : await downloadVideo(url, format);
+          ? await downloadAudio(url, async (progress) => {
+              await supabase
+                .from("downloads")
+                .update({ progress })
+                .eq("id", download.id);
+            })
+          : await downloadVideo(url, format, async (progress) => {
+              await supabase
+                .from("downloads")
+                .update({ progress })
+                .eq("id", download.id);
+            });
 
         // Upload the processed file
         const { error: uploadError } = await supabase.storage
@@ -165,7 +171,10 @@ serve(async (req: Request) => {
         // Update status to completed
         const { error: updateError } = await supabase
           .from("downloads")
-          .update({ status: "completed" })
+          .update({
+            status: "completed",
+            progress: 100,
+          })
           .eq("id", download.id);
 
         if (updateError) throw updateError;
@@ -176,6 +185,7 @@ serve(async (req: Request) => {
           .update({
             status: "failed",
             error_message: error.message,
+            progress: 0,
           })
           .eq("id", download.id);
       }
