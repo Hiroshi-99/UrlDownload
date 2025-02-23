@@ -23,24 +23,34 @@ export const DownloadForm = () => {
 
   const handleDownload = async (downloadId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "get-download-url",
-        {
-          body: { downloadId },
-        }
-      );
+      // Get the download record
+      const { data: download, error: downloadError } = await supabase
+        .from("downloads")
+        .select("file_path")
+        .eq("id", downloadId)
+        .single();
 
-      if (error) throw error;
-      if (!data?.url) throw new Error("No download URL received");
+      if (downloadError) throw downloadError;
+      if (!download?.file_path) throw new Error("File path not found");
+
+      // Get a signed URL directly from storage
+      const { data: signedUrl, error: signedUrlError } = await supabase.storage
+        .from("downloads")
+        .createSignedUrl(download.file_path, 60); // URL expires in 60 seconds
+
+      if (signedUrlError) throw signedUrlError;
+      if (!signedUrl?.signedUrl)
+        throw new Error("Failed to generate download URL");
 
       // Create a temporary link and trigger download
       const link = document.createElement("a");
-      link.href = data.url;
-      link.setAttribute("download", ""); // This will keep the original filename
+      link.href = signedUrl.signedUrl;
+      link.setAttribute("download", "");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
+      console.error("Download error:", error);
       toast({
         title: "Error",
         description: "Failed to download the file. Please try again.",

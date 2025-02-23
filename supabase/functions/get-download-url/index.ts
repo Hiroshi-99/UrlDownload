@@ -1,16 +1,22 @@
-import { serve } from "https://deno.fresh.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// @ts-nocheck
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.21.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
 };
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
   }
 
   try {
@@ -19,13 +25,13 @@ serve(async (req) => {
     // Create Supabase client with service role key for admin access
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "" // Use service role key instead of anon key
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
     // Get the download record
     const { data: download, error: downloadError } = await supabaseClient
       .from("downloads")
-      .select("*")
+      .select("file_path")
       .eq("id", downloadId)
       .single();
 
@@ -36,7 +42,7 @@ serve(async (req) => {
     const { data: signedUrl, error: signedUrlError } =
       await supabaseClient.storage
         .from("downloads")
-        .createSignedUrl(`${download.file_path}`, 60); // Use file_path from the database
+        .createSignedUrl(download.file_path, 60);
 
     if (signedUrlError) throw signedUrlError;
 
