@@ -125,6 +125,8 @@ serve(async (req: Request) => {
         format,
         status: "processing",
         file_path: filePath,
+        progress: 0,
+        stage: "downloading",
       })
       .select()
       .single();
@@ -148,15 +150,30 @@ serve(async (req: Request) => {
           ? await downloadAudio(url, async (progress) => {
               await supabase
                 .from("downloads")
-                .update({ progress })
+                .update({ progress, stage: "downloading" })
                 .eq("id", download.id);
             })
           : await downloadVideo(url, format, async (progress) => {
               await supabase
                 .from("downloads")
-                .update({ progress })
+                .update({ progress, stage: "downloading" })
                 .eq("id", download.id);
             });
+
+        // Update stage to processing
+        await supabase
+          .from("downloads")
+          .update({ stage: "processing", progress: 0 })
+          .eq("id", download.id);
+
+        // Simulate processing time (remove this in production)
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Update stage to uploading
+        await supabase
+          .from("downloads")
+          .update({ stage: "uploading", progress: 0 })
+          .eq("id", download.id);
 
         // Upload the processed file
         const { error: uploadError } = await supabase.storage
@@ -164,6 +181,15 @@ serve(async (req: Request) => {
           .upload(filePath, data, {
             contentType: format.includes("mp3") ? "audio/mpeg" : "video/mp4",
             upsert: true,
+            onUploadProgress: async (progress) => {
+              const percent = Math.round(
+                (progress.loaded / progress.total) * 100
+              );
+              await supabase
+                .from("downloads")
+                .update({ progress: percent })
+                .eq("id", download.id);
+            },
           });
 
         if (uploadError) throw uploadError;
@@ -173,6 +199,7 @@ serve(async (req: Request) => {
           .from("downloads")
           .update({
             status: "completed",
+            stage: "completed",
             progress: 100,
           })
           .eq("id", download.id);
@@ -189,7 +216,7 @@ serve(async (req: Request) => {
           })
           .eq("id", download.id);
       }
-    }, 0); // Start processing immediately
+    }, 0);
 
     return new Response(JSON.stringify({ id: download.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
